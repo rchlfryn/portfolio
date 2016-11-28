@@ -1,0 +1,42 @@
+/*
+	Forty by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+*/
+/* Button */
+/* line 14, ../sass/ie8.scss */
+.button {
+  border: solid 2px !important;
+}
+/* line 17, ../sass/ie8.scss */
+.button.next {
+  padding-right: 1.75em;
+}
+/* line 20, ../sass/ie8.scss */
+.button.next:before, .button.next:after {
+  display: none;
+}
+
+/* Tiles */
+/* line 29, ../sass/ie8.scss */
+.tiles article {
+  width: 50%;
+  -ms-behavior: url("assets/js/ie/backgroundsize.min.htc");
+  background-size: cover;
+}
+
+/* Banner */
+/* line 38, ../sass/ie8.scss */
+#banner {
+  -ms-behavior: url("assets/js/ie/backgroundsize.min.htc");
+}
+/* line 41, ../sass/ie8.scss */
+#banner:after {
+  display: none;
+}
+
+/* Menu */
+/* line 48, ../sass/ie8.scss */
+#menu {
+  background: #3E3D45;
+}

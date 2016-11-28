@@ -1,0 +1,66 @@
+///
+/// Forty by HTML5 UP
+/// html5up.net | @ajlkn
+/// Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+///
+
+/* Footer */
+
+	#footer {
+		.copyright {
+			font-size: 0.8em;
+			list-style: none;
+			padding-left: 0;
+			display: inline-block;
+			width: 49%;
+
+			li {
+				border-left: solid 1px _palette(border);
+				color: _palette(fg-light);
+				display: inline-block;
+				line-height: 1;
+				margin-left: 1em;
+				padding-left: 1em;
+
+				&:first-child {
+					border-left: 0;
+					margin-left: 0;
+					padding-left: 0;
+				}
+			}
+		}
+
+		.icons {
+							display: inline-block;
+				width: 49%;
+				text-align: right;
+			&.animate > li{
+				animation: pop 1s 1;
+				animation-delay: 1s;
+			}
+			@keyframes pop {
+			  0%, 100% {
+			    transform: scale(1);
+			  }
+			  50% {
+			    transform: scale(1.5);
+			  }
+			}
+		}
+
+		@include breakpoint(small) {
+			.copyright {
+				li {
+					display: block;
+					border-left: 0;
+					margin-left: 0;
+					padding-left: 0;
+					line-height: inherit;
+				}
+			}
+			.icons {
+				width: 100%;
+				text-align: left;
+			}
+		}
+	}
