@@ -1,0 +1,289 @@
+'use strict';
+
+let _ = require('lodash'),
+  gulp = require('gulp'),
+  fs = require('fs'),
+  runSequence = require('run-sequence'),
+  lfoGulpFedTasks = require('lfo-gulp-fed-tasks'),
+  cwd = process.cwd(),
+  server, client;
+
+gulp.task('eslint', lfoGulpFedTasks.eslint(gulp));
+
+gulp.task('js', ['eslint'], lfoGulpFedTasks.js(gulp));
+
+gulp.task('js-prepublish', function() {
+  let stream = lfoGulpFedTasks.js(gulp, {
+    "uglify": true,
+    "outputDir": './src/assets/foxpub/scripts',
+  })();
+
+  return stream
+    .pipe(lfoGulpFedTasks.addHash('./.hashes'))
+    .pipe(gulp.dest('./prepublish/publishable_assets/scripts'));
+});
+
+gulp.task('sass', lfoGulpFedTasks.sass(gulp, {
+  compass: false
+}));
+
+gulp.task('sass-prepublish', function() {
+  var stream = lfoGulpFedTasks.sass(gulp, {
+    "output": '',
+    "minify": true,
+    "makeSourcemaps": false,
+    "compass": false
+  })();
+
+  return stream
+    .pipe(lfoGulpFedTasks.addHash('./.hashes'))
+    .pipe(gulp.dest('./prepublish/publishable_assets/stylesheets'));
+});
+
+gulp.task('imagemin', lfoGulpFedTasks.imagemin(gulp));
+
+gulp.task('nunjucks', lfoGulpFedTasks.nunjucks(gulp));
+
+gulp.task('nunjucks-fixtures', lfoGulpFedTasks.nunjucks(gulp, {
+  "output": 'tests/fixtures/'
+}));
+
+gulp.task('nunjucks-prepublish', lfoGulpFedTasks.nunjucks(gulp, {
+  "output": 'prepublish/motif/layouts'
+}));
+
+// these prepublish tasks seems too trivial to modularize
+gulp.task('nav-prepublish', function() {
+  gulp.src('./src/navigation/**/*.html')
+    .pipe(gulp.dest('./prepublish/motif/navigation'));
+});
+
+gulp.task('component-prepublish', function() {
+  gulp.src('./src/modules/**/*.html')
+    .pipe(gulp.dest('./prepublish/motif/components'));
+})
+
+// Add here any assets other than scripts or stylesheets that need to get published
+// For example, images and fonts
+gulp.task('asset-prepublish', function() {
+  gulp.src(['images/**/*', 'vendor/**/*', 'fonts/**/*'], {
+    cwd: './src/assets/foxpub/',
+    base: './src/assets/foxpub/'
+  })
+  .pipe(lfoGulpFedTasks.addHash('./.hashes'))
+  .pipe(gulp.dest('./prepublish/publishable_assets'));
+});
+
+gulp.task('fox-fakes3', function(cb) {
+  let s3rver = require('s3rver');
+
+  try {
+    fs.lstatSync('./.fakes3').isDirectory()
+  } catch (err) {
+    fs.mkdirSync('./.fakes3');
+  }
+
+  client = new s3rver({
+    port: 9998,
+    hostname: 'localhost',
+    silent: false,
+    directory: '.fakes3'
+  }).run(function(err, host, port) {
+    if (err) {
+      return cb(err);
+    }
+    cb();
+  });
+});
+
+gulp.task('fox-build', ['fox-buildfake'], function(done) {
+  if (client)
+    client.close(done);
+  else done();
+});
+
+gulp.task('fox-buildfake', ['fox-fakes3'], function(done) {
+  let task = lfoGulpFedTasks.foxify(gulp, {
+    fakes3: true
+  })();
+
+  task.then(function(err) {
+    if (err)
+      console.log(err);
+
+    done();
+  }).catch(function(err) {
+    if (client)
+      client.close(function() {
+        done(err);
+      });
+    else done(err);
+  });
+});
+
+gulp.task('fox-buildreal', function(done) {
+  let task = lfoGulpFedTasks.foxify(gulp, {
+    fakes3: false
+  })();
+
+  task.then(function(err) {
+    if (err)
+      console.log(err);
+    done();
+  });
+});
+
+/*
+// PROJECT SPECIFIC TASKS
+*/
+
+gulp.task('prepublish', ['asset-prepublish', 'js-prepublish', 'sass-prepublish', 'nav-prepublish', 'nunjucks-prepublish', 'component-prepublish'], function() {
+  console.log('prepublished');
+});
+
+gulp.task('start-server', function() {
+  let lfoFedDevServer = require('lfo-fed-dev-server'),
+    routes = require('./lib/routes.js');
+
+  server = lfoFedDevServer.startServer(8000, routes);
+});
+
+gulp.task('build-tests', function(done) {
+  let task = lfoGulpFedTasks.test(gulp, {
+    input: [
+      './tests/build_tests/tests.js'
+    ]
+  })();
+
+  task.then(function(status) {
+    if (status)
+      console.log(status);
+    done();
+  }).catch(function(err) {
+    if (err)
+      console.log(err);
+    done(err);
+  });
+});
+
+gulp.task('pre-test', ['compile', 'nunjucks-fixtures'], function() {
+  let istanbul = require('gulp-istanbul');
+
+  return gulp.src(['./src/assets/foxpub/scripts/*.js'])
+    .pipe(istanbul())
+    .pipe(istanbul.hookRequire())
+});
+
+// gulp.task('run-tests', ['pre-test']);
+
+gulp.task('unit-tests', lfoGulpFedTasks.test(gulp, {
+  input: [
+    './tests/unit_tests/tests.js'
+  ]
+}));
+
+gulp.task('e2e-tests', ['start-server'], function(done) {
+  let task = lfoGulpFedTasks.testEach(gulp, {
+    input: [
+      './tests/e2e_tests/base.js'
+    ],
+    'browsers': ['phantomjs']
+  })();
+
+  task.then(function() {
+    if (server)
+      server.close(done);
+    else done();
+  }).catch(function(err) {
+    if (server)
+      server.close(function() {
+        done(err);
+      });
+    else done();
+  });
+});
+
+gulp.task('test', ['pre-test'], function(done) {
+  runSequence('unit-tests', 'e2e-tests', 'build-tests', function(err) {
+    if (err)
+      console.log(err)
+    done();
+  });
+});
+
+// PROJECT INIT
+gulp.task('init', function(done) {
+  done();
+});
+
+gulp.task('compile', ['sass', 'js', 'nunjucks'], function() {
+  console.log("CSS, JS, Navigations, and Nunjucks compiled");
+});
+
+gulp.task('dev', ['sass', 'js', 'imagemin'], function() {
+  let livereload = require('gulp-livereload');
+
+  runSequence('nunjucks', 'nunjucks-fixtures', 'start-server');
+
+  livereload.listen();
+
+  gulp.watch(['src/modules/*', 'src/modules/navigation/*', 'src/layouts/*'], ['nunjucks'], function() {
+    livereload.changed();
+  });
+  gulp.watch('./src/assets/foxpub/stylesheets/*.css', function() {
+    livereload.changed();
+  });
+
+  gulp.watch(['./src/modules/*', './src/modules/navigation/*', './src/layouts/*', './src/layouts/partials/*'], ['nunjucks']);
+  gulp.watch(['./src/modules/*', './src/modules/navigation/*', './src/layouts/*', './src/layouts/partials/*'], ['nunjucks-fixtures']);
+  gulp.watch('./src/assets/foxpub/stylesheets/**/*.scss', ['sass']);
+  gulp.watch('./src/assets/foxpub/scripts/app/*.js', ['js']);
+  gulp.watch('./src/assets/foxpub/images/**/*', ['imagemin']);
+});
+
+// Default task
+gulp.task('default', ['dev']);
+
+
+
+{
+  "name": "slenderman-demo-repo",
+  "version": "3.0.1",
+  "description": "demo and boilerplate for FED projects",
+  "scripts": {
+    "test": "gulp test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@gh.leapfrogonline.com:frontend/slenderman.git"
+  },
+  "author": "fedteam",
+  "devDependencies": {
+    "async": "^1.5.0",
+    "chai": "^1.9.1",
+    "chai-fs": "^0.1.0",
+    "chai-webdriver": "^1.1.1",
+    "ejs": "^2.3.4",
+    "gulp-istanbul": "^0.10.2",
+    "gulp-livereload": "^3.8.0",
+    "gulp-mocha": "^2.2.0",
+    "jsdom": "^7.0.2",
+    "lfo-fed-dev-server": "^5.0.0",
+    "phantomjs": "^1.9.19",
+    "s3rver": "0.0.12",
+    "selenium-webdriver": "^2.48.2"
+  },
+  "dependencies": {
+    "breakpoint-sass": "^2.6.1",
+    "gulp": "^3.9.0",
+    "gulp-concat": "^2.5.2",
+    "lfo-gulp-fed-tasks": "^5.1.7",
+    "lodash": "^3.3.1",
+    "mustache": "^2.2.1",
+    "run-sequence": "^1.0.2",
+    "susy": "^2.2.6"
+  },
+  "engines": {
+    "node": ">= 5.1.0"
+  }
+}
